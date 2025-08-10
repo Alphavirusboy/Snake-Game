@@ -1,0 +1,626 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Hex Snake</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+:root{
+  --bg-dark:#231107; --bg-mid:#4a2b00; --gold1:#ffd64f; --gold2:#d1b354;
+  --ui-bg: rgba(0,0,0,0.28);
+  --accent: #ffb74d;
+}
+html,body{height:100%;margin:0;background:linear-gradient(160deg,var(--bg-dark),var(--bg-mid) 60%,#6b3f00);font-family:Inter,Segoe UI,Roboto,Arial;color:#fff;overflow:hidden}
+.wrap{display:flex;gap:16px;height:100%;padding:14px;box-sizing:border-box;align-items:flex-start}
+canvas{border-radius:12px;box-shadow:0 14px 60px rgba(0,0,0,0.6);background:transparent;display:block}
+.ui{min-width:320px;background:var(--ui-bg);padding:14px;border-radius:12px;backdrop-filter:blur(6px)}
+h3{margin:0 0 8px;font-weight:600}
+.controls{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.dir-btn{padding:10px;border-radius:8px;border:none;background:linear-gradient(180deg,#3b2200,#271200);color:#ffd;cursor:pointer;font-size:13px}
+.dir-btn:active{transform:translateY(1px)}
+.row{display:flex;gap:8px;margin-top:8px;align-items:center}
+.btn{flex:1;padding:9px;border-radius:8px;border:none;background:linear-gradient(180deg,#ffdd80,#c08900);color:#351900;font-weight:600;cursor:pointer}
+label{font-size:13px;margin-top:8px;display:block}
+input[type=range]{width:100%}
+.small{font-size:13px;color:#ffeaa7}
+.panel{margin-top:12px;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px}
+.kbd{display:flex;gap:6px;flex-wrap:wrap}
+.keybox{padding:6px 8px;background:rgba(0,0,0,0.35);border-radius:6px}
+.modal{position:fixed;left:0;top:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(rgba(0,0,0,0.35),rgba(0,0,0,0.6));z-index:60;visibility:hidden;opacity:0;transition:opacity .18s}
+.modal.show{visibility:visible;opacity:1}
+.dialog{background:#1d1300;padding:18px;border-radius:12px;min-width:260px;color:#fff;box-shadow:0 8px 36px rgba(0,0,0,0.6)}
+.small-muted{font-size:12px;color:#f7e0b5}
+.credit {
+  position: fixed; right: 12px; bottom: 10px; font-size:12px; color: rgba(255,235,165,0.95);
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.6);
+  user-select:none; pointer-events:none; opacity:0.0; transition:opacity 1.6s ease-in;
+}
+.credit.show{opacity:1.0}
+.level-badge { display:inline-block; padding:6px 10px; background:rgba(255,255,255,0.05); border-radius:8px; font-weight:600; color:#fff; }
+@media (max-width:1000px){
+  .wrap{flex-direction:column;align-items:center}
+  .ui{width:94%}
+  canvas{width:94%;height:auto}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <canvas id="game" width="980" height="820"></canvas>
+
+  <div class="ui">
+    <h3>Hex Snake</h3>
+
+    <div class="controls" id="dirButtons">
+      <button class="dir-btn" data-dir="0">1 → E</button>
+      <button class="dir-btn" data-dir="1">2 ↗ NE</button>
+      <button class="dir-btn" data-dir="2">3 ↖ NW</button>
+      <button class="dir-btn" data-dir="3">4 ← W</button>
+      <button class="dir-btn" data-dir="4">5 ↙ SW</button>
+      <button class="dir-btn" data-dir="5">6 ↘ SE</button>
+    </div>
+
+    <div class="small">Menu: <span class="level-badge" id="levelBadge">Level 1</span></div>
+
+    <div class="row">
+      <div style="flex:1" class="small">Score: <strong id="score">0</strong></div>
+      <div style="flex:1;text-align:right" class="small">High: <strong id="highScore">0</strong></div>
+    </div>
+
+    <div class="row" style="margin-top:6px">
+      <div style="flex:1" class="small">Status: <span id="status">Menu</span></div>
+      <div style="flex:1;text-align:right"><span id="tips" class="small-muted">Tip: Swipe to move on mobile</span></div>
+    </div>
+
+    <label>Speed (moves/sec)</label>
+    <input id="speed" type="range" min="2" max="14" value="6">
+
+    <div class="row" style="margin-top:10px">
+      <button id="startBtn" class="btn">▶ Start</button>
+      <button id="pauseBtn" class="btn">⏸ Pause</button>
+    </div>
+
+    <div class="panel">
+      <div class="small">Special foods:</div>
+      <ul style="margin:8px 0 0;padding-left:18px">
+        <li class="small-muted">Golden Apple — double points (brief)</li>
+        <li class="small-muted">Poison — shrink or penalty</li>
+      </ul>
+      <div style="margin-top:10px" class="small-muted">Menu, high-score persistence, smooth motion & physics collapse included.</div>
+    </div>
+
+    <div class="panel" style="margin-top:12px">
+      <div class="small">Keyboard remap (click then press a key):</div>
+      <div class="kbd" id="remapUI" style="margin-top:8px"></div>
+    </div>
+  </div>
+</div>
+
+<div id="modal" class="modal"><div class="dialog>
+  <div style="font-weight:700;font-size:18px" id="modalTitle">Game Over</div>
+  <div class="small-muted" id="modalBody" style="margin-top:8px">You scored <span id="modalScore">0</span></div>
+  <div style="margin-top:12px;display:flex;gap:8px">
+    <button id="modalRestart" class="btn" style="flex:1">Restart</button>
+    <button id="modalClose" class="btn" style="flex:1">Close</button>
+  </div>
+  <div class="small-muted" style="margin-top:10px">Restarting in <span id="modalCountdown">5</span>s...</div>
+</div></div>
+
+<div class="credit" id="creditEl">© 2025 Parth Patil – Original Game Design.Made with ❤️</div>
+
+<script>
+/* ----------------------------- Settings & Helpers ----------------------------- */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d', { alpha: false });
+const scoreEl = document.getElementById('score');
+const highScoreEl = document.getElementById('highScore');
+const statusEl = document.getElementById('status');
+const levelBadge = document.getElementById('levelBadge');
+const speedSlider = document.getElementById('speed');
+const creditEl = document.getElementById('creditEl');
+
+const HEX_BASE = 36;           // base hex radius
+let GRID_RADIUS = 9;          // playable radius
+const DIRECTIONS = [
+  {q:1,r:0}, {q:1,r:-1}, {q:0,r:-1},
+  {q:-1,r:0}, {q:-1,r:1}, {q:0,r:1}
+];
+
+let DPR = window.devicePixelRatio || 1;
+let HEX_SIZE = HEX_BASE;
+let globalScale = 1;
+
+/* fit canvas to available area and compute scale so entire field is visible */
+function computeHexBounds(radius, size) {
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  for (let q=-radius;q<=radius;q++){
+    for (let r=Math.max(-radius,-q-radius); r<=Math.min(radius,-q+radius); r++){
+      const p = hexToPixel(q,r,size);
+      minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x);
+      minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y);
+    }
+  }
+  return {minX,minY,maxX,maxY,width:maxX-minX,height:maxY-minY};
+}
+
+function fitCanvasAndScale(){
+  // pick available area (canvas sized to leftover space automatically)
+  const wrapRect = document.querySelector('.wrap').getBoundingClientRect();
+  const uiRect = document.querySelector('.ui').getBoundingClientRect();
+  const sideGap = 24;
+  const availableW = Math.max(480, window.innerWidth - uiRect.width - sideGap*2);
+  const availableH = Math.max(420, window.innerHeight - 40);
+  canvas.style.width = Math.min(availableW, 1300) + 'px';
+  canvas.style.height = Math.min(availableH, 980) + 'px';
+  DPR = window.devicePixelRatio || 1;
+  canvas.width = Math.floor(canvas.clientWidth * DPR);
+  canvas.height = Math.floor(canvas.clientHeight * DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+
+  const pad = 36;
+  const baseSize = HEX_BASE;
+  const bounds = computeHexBounds(GRID_RADIUS, baseSize);
+  const scaleX = (canvas.clientWidth - pad*2) / (bounds.width || 1);
+  const scaleY = (canvas.clientHeight - pad*2) / (bounds.height || 1);
+  globalScale = Math.min(scaleX, scaleY, 1);
+  HEX_SIZE = baseSize * globalScale;
+}
+
+/* axial <-> pixel (pointy-top) */
+function hexToPixel(q, r, size = HEX_SIZE) {
+  const x = size * Math.sqrt(3) * (q + r/2);
+  const y = size * 3/2 * r;
+  return {x, y};
+}
+
+/* get list of all cells */
+function allCells(){
+  const out=[];
+  for (let q=-GRID_RADIUS;q<=GRID_RADIUS;q++){
+    for (let r=Math.max(-GRID_RADIUS,-q-GRID_RADIUS); r<=Math.min(GRID_RADIUS,-q+GRID_RADIUS); r++){
+      out.push({q,r});
+    }
+  }
+  return out;
+}
+
+/* key helpers */
+function coordKey(c){ return c.q + ',' + c.r; }
+function sameCell(a,b){ return a && b && a.q===b.q && a.r===b.r; }
+function randomEmptyCell(excludeSet){
+  const cells = allCells().filter(c => !excludeSet.has(coordKey(c)));
+  return cells.length ? cells[Math.floor(Math.random()*cells.length)] : null;
+}
+
+/* wrap (toroidal-ish) */
+function axialWrap(q,r){
+  let x = q, z = r, y = -x - z;
+  const span = 2*GRID_RADIUS + 1;
+  x = ((x + GRID_RADIUS) % span + span) % span - GRID_RADIUS;
+  y = ((y + GRID_RADIUS) % span + span) % span - GRID_RADIUS;
+  z = -x - y;
+  return {q:x, r:z};
+}
+
+/* ----------------------------- Game State ----------------------------- */
+let snake = [];            // array of axial coords tail->head
+let segmentPixels = [];    // pixel positions for smooth interpolation
+let dirIndex = 0;
+let targetDir = 0;
+let food = null;
+let score = 0;
+let highScore = parseInt(localStorage.getItem('hexHighScore') || '0') || 0;
+highScoreEl.textContent = highScore;
+let running = false;
+let moveTimer = null;
+let moveMs = 1000 / parseInt(speedSlider.value);
+let lastFrame=0, animReq=null;
+
+/* falling physics & particles */
+let fallingPieces = [];
+let particles = [];
+let shaking = {active:false,tStart:0,duration:0.35,magnitude:0};
+
+/* levels */
+let level = 1;
+function updateLevelFromScore() {
+  const newLevel = 1 + Math.floor(score / 6);
+  if (newLevel !== level) {
+    level = newLevel;
+    levelBadge.textContent = 'Level ' + level;
+    // small visual change per level (tint)
+  }
+}
+
+/* ----------------------------- Draw helpers ----------------------------- */
+function drawHexPath(x,y,size){
+  ctx.beginPath();
+  for (let i=0;i<6;i++){
+    const angle = (Math.PI/180)*(60*i - 30);
+    const px = x + size * Math.cos(angle);
+    const py = y + size * Math.sin(angle);
+    if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }
+  ctx.closePath();
+}
+
+function drawGoldHex(x,y,size,tone=0){
+  const g = ctx.createLinearGradient(x-size,y-size,x+size,y+size);
+  if (tone===0){
+    g.addColorStop(0,'#e6c96a'); g.addColorStop(0.48,'#ffd84b'); g.addColorStop(1,'#b07a00');
+  } else {
+    g.addColorStop(0,'#d1b354'); g.addColorStop(0.5,'#ffcf39'); g.addColorStop(1,'#a56800');
+  }
+  drawHexPath(x,y,size);
+  ctx.fillStyle = g; ctx.fill();
+  ctx.strokeStyle = 'rgba(70,45,0,0.54)'; ctx.lineWidth = Math.max(1, size*0.05); ctx.stroke();
+  // shine
+  ctx.save(); ctx.clip();
+  const shine = ctx.createLinearGradient(x-size, y-size*1.2, x+size, y+size);
+  shine.addColorStop(0,'rgba(255,255,255,0.24)');
+  shine.addColorStop(0.35,'rgba(255,255,255,0.08)');
+  shine.addColorStop(1,'rgba(255,255,255,0.0)');
+  ctx.fillStyle = shine; drawHexPath(x,y - size*0.22, size*1.02); ctx.fill(); ctx.restore();
+}
+
+/* ----------------------------- Init / Reset ----------------------------- */
+function initGame(){
+  fitCanvasAndScale();
+  snake = [{q:0,r:0},{q:-1,r:1},{q:-2,r:2}];
+  dirIndex = 0; targetDir = 0;
+  score = 0; scoreEl.textContent = score;
+  running = false; statusEl.textContent = 'Menu';
+  placeFood();
+  segmentPixels = snake.map(s => hexToPixel(s.q,s.r,HEX_SIZE));
+  fallingPieces = []; particles = []; shaking.active = false;
+  level = 1; levelBadge.textContent = 'Level ' + level;
+  hideModal();
+  // show credit after start (subtle): wait & fade
+  setTimeout(()=> creditEl.classList.add('show'), 900);
+  lastFrame = performance.now();
+  drawFrame(lastFrame);
+}
+
+/* ----------------------------- Food types -----------------------------
+We have three types:
+- normal: +1
+- golden: double points (exists briefly)
+- poison: shrink or -1
+----------------------------------------------------------------------- */
+function placeFood(){
+  const exclude = new Set(snake.map(coordKey));
+  const base = randomEmptyCell(exclude);
+  if (!base) { food = null; return; }
+  // choose type by probability & level
+  const roll = Math.random();
+  let type = 'normal';
+  const goldenChance = Math.min(0.06 + level*0.01, 0.16);
+  const poisonChance = Math.min(0.04 + level*0.01, 0.12);
+  if (roll < goldenChance) type = 'golden';
+  else if (roll < goldenChance + poisonChance) type = 'poison';
+  food = { q: base.q, r: base.r, type: type, spawnAt: performance.now()/1000 };
+}
+
+/* ----------------------------- Movement tick ----------------------------- */
+function tickMove(){
+  if (!running) return;
+  if ((targetDir + 3) % 6 !== dirIndex) dirIndex = targetDir;
+  const head = snake[snake.length-1];
+  const d = DIRECTIONS[dirIndex];
+  let newHead = { q: head.q + d.q, r: head.r + d.r };
+  newHead = axialWrap(newHead.q, newHead.r);
+
+  // collision with self?
+  if (snake.some(s => sameCell(s,newHead))) {
+    startShakeThenCollapse(); return;
+  }
+
+  snake.push(newHead);
+  // eat?
+  if (food && sameCell(newHead, food)) {
+    if (food.type === 'normal') { score += 1; spawnEatParticles(newHead); }
+    else if (food.type === 'golden') { score += 2; spawnEatParticles(newHead, true); }
+    else if (food.type === 'poison') { // penalty
+      score = Math.max(0, score - 1);
+      // shrink snake a bit if possible
+      if (snake.length > 3) snake.splice(0, Math.min(2, snake.length-3));
+      spawnPoisonParticles(newHead);
+    }
+    scoreEl.textContent = score;
+    updateLevelFromScore();
+    // speed progression: slightly increase speed with score
+    const baseSpeed = parseInt(speedSlider.value);
+    const extra = Math.floor(score / 6);
+    moveMs = 1000 / Math.min(18, baseSpeed + extra);
+    if (moveTimer) { clearInterval(moveTimer); moveTimer = setInterval(tickMove, moveMs); }
+    placeFood();
+  } else {
+    snake.shift();
+  }
+  // adjust pixel positions
+  const headPixel = segmentPixels.length ? {...segmentPixels[segmentPixels.length-1]} : hexToPixel(newHead.q,newHead.r,HEX_SIZE);
+  segmentPixels.push(headPixel);
+  if (segmentPixels.length > snake.length) segmentPixels.shift();
+}
+
+/* ----------------------------- Shake + Collapse ----------------------------- */
+function startShakeThenCollapse(){
+  if (shaking.active) return;
+  shaking.active = true; shaking.tStart = performance.now()/1000; shaking.duration = 0.42;
+  shaking.magnitude = Math.max(6, Math.min(22, HEX_SIZE*0.12));
+  statusEl.textContent = 'Shaking...';
+  setTimeout(()=> triggerCollapse(), Math.floor(shaking.duration*1000));
+}
+
+function triggerCollapse(){
+  running = false; statusEl.textContent = 'Game Over';
+  if (moveTimer) { clearInterval(moveTimer); moveTimer = null; }
+  fallingPieces = []; particles = [];
+  const cx = canvas.clientWidth/2, cy = canvas.clientHeight/2;
+  const now = performance.now()/1000;
+  const cells = allCells();
+  for (const c of cells){
+    const p = hexToPixel(c.q,c.r,HEX_SIZE);
+    const x = cx + p.x, y = cy + p.y;
+    const dist = Math.hypot(p.x,p.y);
+    const norm = dist / ((GRID_RADIUS+1)*HEX_SIZE*1.9);
+    const delay = norm*0.18 + Math.random()*0.06;
+    fallingPieces.push({
+      x,y,size:HEX_SIZE-2,
+      fill: ((c.q+c.r)&1) ? '#d1b354' : '#ffd64f',
+      stroke: '#8a5f00',
+      vx:(Math.random()-0.5)*160, vy:-80 - Math.random()*160,
+      ay:1400 + Math.random()*900, angle:(Math.random()-0.5)*0.6, av:(Math.random()-0.5)*6,
+      startAt: now + delay, puffed:false
+    });
+  }
+  for (const seg of snake){
+    const p = hexToPixel(seg.q,seg.r,HEX_SIZE);
+    fallingPieces.push({
+      x: cx + p.x, y: cy + p.y, size: HEX_SIZE - 10,
+      fill: `hsl(${Math.random()*360},78%,55%)`, stroke:'#2a1200',
+      vx:(Math.random()-0.5)*260, vy:-140 - Math.random()*260,
+      ay:1900 + Math.random()*800, angle:(Math.random()-0.5)*1.4, av:(Math.random()-0.5)*10,
+      startAt: now + 0.02 + Math.random()*0.06, puffed:false
+    });
+  }
+  // food piece
+  if (food){
+    const p = hexToPixel(food.q, food.r, HEX_SIZE);
+    fallingPieces.push({
+      x: cx + p.x, y: cy + p.y, size: HEX_SIZE - 10,
+      fill: food.type === 'golden' ? '#ffeea0' : (food.type === 'poison' ? '#7a1f1f' : '#ff7a59'),
+      stroke:'#b03a10',
+      vx:(Math.random()-0.5)*220, vy:-160 - Math.random()*260, ay:2000 + Math.random()*600,
+      angle:(Math.random()-0.5)*1.6, av:(Math.random()-0.5)*12, startAt: now + 0.02, puffed:false
+    });
+  }
+  // highscore update & modal
+  if (score > highScore) { highScore = score; localStorage.setItem('hexHighScore', String(highScore)); highScoreEl.textContent = highScore; }
+  showModalWithCountdown(score);
+}
+
+/* ----------------------------- Particles ----------------------------- */
+function spawnDust(x,y,count=18){
+  for (let i=0;i<count;i++){
+    particles.push({
+      x,y, vx:(Math.random()-0.5)*260, vy:-Math.random()*220, ay:1800 + Math.random()*300,
+      r:3 + Math.random()*8, life:0.9 + Math.random()*0.8, maxLife:0.9 + Math.random()*0.8,
+      color:'rgba(210,170,80,0.95)'
+    });
+  }
+}
+function spawnEatParticles(cell, golden=false){
+  const p = hexToPixel(cell.q,cell.r,HEX_SIZE);
+  const cx = canvas.clientWidth/2 + p.x, cy = canvas.clientHeight/2 + p.y;
+  const cnt = Math.min(48, 8 + snake.length*3);
+  for (let i=0;i<cnt;i++){
+    particles.push({
+      x:cx, y:cy, vx:(Math.random()-0.5)*340, vy:(Math.random()-0.9)*-260,
+      ay:1200 + Math.random()*800, r:2 + Math.random()*6, life:0.6 + Math.random()*0.9, maxLife:0.6 + Math.random()*0.9,
+      color: golden ? 'rgba(255,230,140,0.98)' : `hsl(${(Math.random()*50)+20},90%,60%)`
+    });
+  }
+}
+function spawnPoisonParticles(cell){
+  const p = hexToPixel(cell.q,cell.r,HEX_SIZE);
+  const cx = canvas.clientWidth/2 + p.x, cy = canvas.clientHeight/2 + p.y;
+  for (let i=0;i<18;i++){
+    particles.push({
+      x:cx, y:cy, vx:(Math.random()-0.5)*220, vy:-Math.random()*200, ay:1200 + Math.random()*400,
+      r:2 + Math.random()*5, life:0.4 + Math.random()*0.6, maxLife:0.4 + Math.random()*0.6,
+      color:'rgba(110,20,20,0.92)'
+    });
+  }
+}
+
+/* ----------------------------- Draw loop ----------------------------- */
+function drawFrame(now){
+  const t = now || performance.now();
+  const dt = lastFrame ? Math.min(40, t-lastFrame)/1000 : 0;
+  lastFrame = t;
+
+  // clear
+  ctx.fillStyle = '#2b1700'; ctx.fillRect(0,0,canvas.width/DPR,canvas.height/DPR);
+
+  // shaking transform
+  let sx=0, sy=0, srot=0;
+  if (shaking.active) {
+    const sNow = performance.now()/1000;
+    const elapsed = sNow - shaking.tStart;
+    const prog = Math.min(1, elapsed / shaking.duration);
+    const mag = shaking.magnitude * (1 - prog);
+    sx = (Math.random()*2-1)*mag; sy = (Math.random()*2-1)*mag*0.6; srot = (Math.random()*2-1)*mag*0.002;
+    if (prog >= 1) shaking.active = false;
+  }
+  ctx.save(); ctx.translate(sx, sy); if (srot) ctx.rotate(srot);
+
+  const cx = canvas.clientWidth/2, cy = canvas.clientHeight/2;
+
+  // draw grid (unless collapsed)
+  if (fallingPieces.length === 0){
+    const cells = allCells();
+    for (const c of cells){
+      const p = hexToPixel(c.q, c.r, HEX_SIZE);
+      drawGoldHex(cx + p.x, cy + p.y, HEX_SIZE - 2, ((c.q + c.r) & 1) ? 1 : 0);
+    }
+  }
+
+  // draw food
+  if (food && fallingPieces.length === 0){
+    const p = hexToPixel(food.q, food.r, HEX_SIZE);
+    const fx = cx + p.x, fy = cy + p.y;
+    const pulse = 1 + 0.12*Math.sin(t/160);
+    ctx.save();
+    ctx.shadowBlur = 18 * pulse;
+    ctx.shadowColor = (food.type === 'golden') ? 'rgba(255,230,140,0.95)' : (food.type === 'poison' ? 'rgba(120,30,30,0.85)' : 'rgba(255,110,55,0.9)');
+    drawHexPath(fx, fy, (HEX_SIZE - 10)*pulse);
+    ctx.fillStyle = (food.type === 'golden') ? '#ffec9b' : (food.type === 'poison' ? '#7a1f1f' : '#ff7a59');
+    ctx.fill(); ctx.restore();
+    // golden apple timer fade (if golden)
+    if (food.type === 'golden'){
+      const age = performance.now()/1000 - food.spawnAt;
+      if (age > 4.5) placeFood(); // disappears early
+    }
+  }
+
+  // draw snake (smooth)
+  for (let i=0;i<snake.length;i++){
+    const seg = snake[i];
+    const target = hexToPixel(seg.q, seg.r, HEX_SIZE);
+    const tx = cx + target.x, ty = cy + target.y;
+    if (!segmentPixels[i]) segmentPixels[i] = {x:tx, y:ty};
+    segmentPixels[i].x += (tx - segmentPixels[i].x) * (0.22 + 0.36*(i/(Math.max(1,snake.length-1))));
+    segmentPixels[i].y += (ty - segmentPixels[i].y) * (0.22 + 0.36*(i/(Math.max(1,snake.length-1))));
+    ctx.save(); ctx.translate(segmentPixels[i].x, segmentPixels[i].y);
+    const hue = (120 + i*14 + (t/12)) % 360;
+    ctx.globalAlpha = 1 - (i / (snake.length + 6)) * 0.35;
+    drawHexPath(0,0, HEX_SIZE - 8);
+    ctx.fillStyle = `hsl(${hue},78%,55%)`; ctx.fill();
+    ctx.strokeStyle = '#331a00'; ctx.lineWidth = Math.max(1, HEX_SIZE*0.03); ctx.stroke();
+    if (i === snake.length - 1){
+      ctx.beginPath(); ctx.fillStyle = '#07111a'; ctx.arc(-6, -3, Math.max(2.6, HEX_SIZE*0.06), 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // falling pieces (collapse)
+  if (fallingPieces.length > 0){
+    for (let i = fallingPieces.length-1; i>=0; i--){
+      const piece = fallingPieces[i];
+      const secNow = performance.now()/1000;
+      if (secNow < piece.startAt) continue;
+      piece.vy += piece.ay * dt;
+      piece.x += piece.vx * dt;
+      piece.y += piece.vy * dt;
+      piece.angle += piece.av * dt;
+      ctx.save();
+      ctx.translate(piece.x, piece.y); ctx.rotate(piece.angle);
+      ctx.globalAlpha = Math.max(0, 1 - (piece.y - canvas.clientHeight*0.15) / (canvas.clientHeight*1.1));
+      drawHexPath(0,0,piece.size); ctx.fillStyle = piece.fill; ctx.fill();
+      ctx.strokeStyle = piece.stroke; ctx.lineWidth = Math.max(1, piece.size*0.04); ctx.stroke();
+      ctx.restore();
+      if (!piece.puffed && piece.vy > 260){ spawnDust(piece.x, Math.min(piece.y + piece.size*0.6, canvas.clientHeight-30), Math.min(40, 6 + Math.floor(snake.length/2))); piece.puffed=true; }
+      if (piece.y > canvas.clientHeight + 300) fallingPieces.splice(i,1);
+    }
+  }
+
+  // particles
+  for (let i=particles.length-1;i>=0;i--){
+    const pr = particles[i];
+    pr.vy += pr.ay * dt; pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.life -= dt;
+    if (pr.life <= 0){ particles.splice(i,1); continue; }
+    ctx.save(); ctx.globalAlpha = Math.max(0, pr.life/pr.maxLife);
+    ctx.fillStyle = pr.color; ctx.beginPath(); ctx.arc(pr.x, pr.y, pr.r * (pr.life/pr.maxLife + 0.05), 0, Math.PI*2); ctx.fill(); ctx.restore();
+  }
+
+  ctx.restore(); // end shake
+
+  animReq = requestAnimationFrame(drawFrame);
+}
+
+/* ----------------------------- Controls & UI ----------------------------- */
+let remapKeys = ['q','w','e','a','s','z'];  // default mapping for directions 0..5
+const dirNames = ['E (0)','NE (1)','NW (2)','W (3)','SW (4)','SE (5)'];
+function buildRemapUI(){
+  const container = document.getElementById('remapUI'); container.innerHTML = '';
+  for (let i=0;i<6;i++){
+    const box = document.createElement('div'); box.className='keybox'; box.dataset.dir=i; box.tabIndex=0;
+    const label = document.createElement('div'); label.style.fontSize='12px'; label.style.opacity='0.9'; label.textContent=dirNames[i];
+    const key = document.createElement('div'); key.style.fontWeight='700'; key.style.marginTop='4px'; key.textContent=(remapKeys[i]||'').toUpperCase();
+    box.appendChild(label); box.appendChild(key); container.appendChild(box);
+    box.addEventListener('click', ()=> startRemap(box, key, i));
+  }
+}
+let remapActive = null;
+function startRemap(box,keyEl,dirIdx){
+  remapActive = {box,keyEl,dirIdx}; box.style.outline='2px solid rgba(255,240,180,0.9)'; keyEl.textContent='Press key...';
+  function handler(ev){ ev.preventDefault(); const k = ev.key.length===1 ? ev.key.toLowerCase() : ev.key; for (let j=0;j<6;j++) if (remapKeys[j]===k) remapKeys[j]=null; remapKeys[dirIdx]=k; cleanup(); }
+  function cleanup(){ document.removeEventListener('keydown', handler); remapActive.box.style.outline=''; remapActive=null; buildRemapUI(); }
+  document.addEventListener('keydown', handler);
+}
+function handleKeydown(ev){
+  const k = ev.key.length===1 ? ev.key.toLowerCase() : ev.key;
+  if (k >= '1' && k <= '6'){ setDir(parseInt(k)-1); startGame(); ev.preventDefault(); return; }
+  for (let i=0;i<6;i++){ if (remapKeys[i] && (k===remapKeys[i].toLowerCase())){ setDir(i); startGame(); ev.preventDefault(); return; } }
+  if (k==='arrowright'){ setDir(0); startGame(); ev.preventDefault(); return; }
+  if (k==='arrowup'){ setDir(1); startGame(); ev.preventDefault(); return; }
+  if (k==='arrowleft'){ setDir(3); startGame(); ev.preventDefault(); return; }
+  if (k==='arrowdown'){ setDir(4); startGame(); ev.preventDefault(); return; }
+  if (k===' '){ if (running) pauseGame(); else startGame(); ev.preventDefault(); return; }
+}
+window.addEventListener('keydown', handleKeydown);
+
+document.getElementById('dirButtons').addEventListener('click', (e)=>{ const b = e.target.closest('.dir-btn'); if (!b) return; setDir(parseInt(b.dataset.dir)); startGame(); });
+
+document.getElementById('startBtn').addEventListener('click', ()=> startGame());
+document.getElementById('pauseBtn').addEventListener('click', ()=> pauseGame());
+
+speedSlider.addEventListener('input', ()=> {
+  moveMs = 1000 / parseInt(speedSlider.value);
+  if (running){ if (moveTimer) clearInterval(moveTimer); moveTimer = setInterval(tickMove, moveMs); }
+});
+
+function setDir(idx){ if ((idx + 3) % 6 === dirIndex) return; targetDir = idx; }
+function startGame(){ if (running) return; running = true; statusEl.textContent='Running'; moveMs = 1000 / parseInt(speedSlider.value); if (moveTimer) clearInterval(moveTimer); moveTimer = setInterval(tickMove, moveMs); }
+function pauseGame(){ running = false; statusEl.textContent='Paused'; if (moveTimer){ clearInterval(moveTimer); moveTimer=null; } }
+
+/* touch swipe */
+let touchStart=null;
+canvas.addEventListener('touchstart',(e)=>{ if (!e.touches||!e.touches[0]) return; const t=e.touches[0]; touchStart={x:t.clientX,y:t.clientY}; });
+canvas.addEventListener('touchend',(e)=>{ if (!touchStart) return; const t=e.changedTouches[0]; const dx=t.clientX-touchStart.x, dy=t.clientY-touchStart.y; touchStart=null; if (Math.hypot(dx,dy)<18) return; let angle = Math.atan2(dy,dx); if (angle<0) angle += Math.PI*2; const sector = Math.round(angle/(Math.PI/3))%6; setDir(sector); startGame(); });
+
+/* ----------------------------- Modal / High-score UI ----------------------------- */
+const modal = document.getElementById('modal');
+const modalScore = document.getElementById('modalScore');
+const modalCountdownEl = document.getElementById('modalCountdown');
+let modalTimer = null;
+function showModalWithCountdown(finalScore){
+  modalScore.textContent = finalScore; modal.classList.add('show'); modalCountdownEl.textContent = 5;
+  let s=5; if (modalTimer) clearInterval(modalTimer);
+  modalTimer = setInterval(()=>{ s--; if (s<=0){ clearInterval(modalTimer); modalTimer=null; hideModal(); initGame(); } modalCountdownEl.textContent = s; },1000);
+}
+function hideModal(){ modal.classList.remove('show'); if (modalTimer){ clearInterval(modalTimer); modalTimer=null; } }
+document.getElementById('modalRestart').addEventListener('click', ()=>{ if (modalTimer) clearInterval(modalTimer); modalTimer=null; hideModal(); initGame(); });
+document.getElementById('modalClose').addEventListener('click', ()=> hideModal());
+
+/* ----------------------------- Resize & Start ----------------------------- */
+window.addEventListener('resize', ()=> { fitCanvasAndScale(); });
+function ensureStart(){
+  buildRemapUI();
+  initGame();
+  animReq = requestAnimationFrame(drawFrame);
+}
+ensureStart();
+
+/* ----------------------------- Utilities: Dust spawn (called earlier) ----------------------------- */
+/* spawnDust, spawnEatParticles, spawnPoisonParticles defined earlier */
+
+/* ----------------------------- Pause on hide ----------------------------- */
+document.addEventListener('visibilitychange', ()=> {
+  if (document.hidden){ if (moveTimer) clearInterval(moveTimer); cancelAnimationFrame(animReq); }
+  else { if (running && !moveTimer) moveTimer = setInterval(tickMove, moveMs); lastFrame = performance.now(); animReq = requestAnimationFrame(drawFrame); }
+});
+</script>
+</body>
+</html>
